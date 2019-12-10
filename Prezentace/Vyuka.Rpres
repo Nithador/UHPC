@@ -1,0 +1,288 @@
+R in HPC environment
+========================================================
+author: Tomáš Martinovič
+css: Vyuka.css
+date: 11.12.2019
+autosize: true
+font-family: 'serif'
+height: 1080
+width:1920
+#font-import: http://fonts.googleapis.com/css?family=Risque
+#font-family: 'Risque'
+
+What is R?
+========================================================
+left: 70%
+R is statistical language based on the S language.
+
+It is focused on the data analysis, but can be used for other things now.
+Among these are GIS applications, mathematical analysis and such.
+
+***
+
+![CRAN logo](Vyuka-figure/Rlogo.png)
+
+Characteristics of R
+========================================================
+class:vert_center
+
+- **Functional programming**
+- data are immutable
+- Easy to use and learn (for non-programmers)
+- Great flexibility
+- Large user base
+- Enormous number of packages available in different fields
+- Can be slow and memory inefficient (but many function are actually written in C)
+- No direct memory control - garbage collector
+
+RStudio
+========================================================
+RStudio is IDE dor R, which enables to easily create new scripts, projects, interactive files.
+
+<!-- ![RStudio](Vyuka-figure/rstudio.png) -->
+```{r, echo =FALSE, out.width = "1500px", fig.align = "center"}
+knitr::include_graphics("Vyuka-figure/rstudio.png")
+```
+R basics
+=======================================================
+```{r}
+# Comments are written with "#"
+library(tidyverse) # loading library "tidyverse"
+tbl_mtcars <- as_tibble(mtcars) # we can assign an object with "<-" not "=" as you might be used to
+tbl_mtcars # writing only the variable will do  default action for it, usually print() or equivalent
+```
+- tbl_mtcars is a tibble, which is special format of data.frame
+- tibbles are basic object in which are stored data in R
+- it is a special list which contains object with equal length
+- each column may have different class
+
+R as a functional language
+=======================================================
+```{r}
+x <- 2  # 2 is assigned to x
+add_3 <- function(y){
+  cat( "The value of x is ", x, "\n") # It will print x from global environment
+  x <- 3   # The x is defined inside the function, this does not affect x in global environment
+  y + x    # Local x is added to y
+}
+add_3(3) 
+x # See that global x was not affected by the assignment inside the function.
+```
+
+R as a functional language
+=======================================================
+```{r}
+# It is possible to nest function into function
+add_3(add_3(3))
+```
+- Actually, R will let you write incredibly complicated nested statements.
+- That does not mean all of it is good.
+
+Tidyverse
+========================================================
+
+Tidyverse is a set of libraries which are meant to work together and improve the workflow in R.
+
+### Core packages
+```{r, echo = FALSE}
+library(kableExtra)
+library(tidyverse)
+
+tribble(
+  ~Package, ~Purpose,
+ "readr"         , "reading table data"  ,
+ "tidyr"         , "data preparation"    ,
+ "dplyr"         , "data analysis"       ,
+ "ggplot2"       , "visualization"       ,
+ "purrr"         , "iteration functions" ,
+ "tibble"        , "special data frame"  ,
+ "stringr"       , "text operations"     ,
+ "forcats"       , "factor operations"   
+) %>%
+  kable(format = "html", table.attr='class="myTable"' ) %>%
+  kable_styling(font_size = 40) %>%
+  row_spec(0, font_size = 40, background = "#bbb") %>%
+  row_spec(c(1,3,5,7), background = "#eee")
+```
+Read more at https://www.tidyverse.org/.
+
+R with tidyverse syntax
+========================================================
+```{r}
+tbl_mtcars %>%                 # pipes, %>%, connect multiple operations  
+  filter(cyl == 4, carb == 2) %>%  # filter cyl and carb
+  select(mpg, disp, hp, drat, wt, qsec) # select columns
+
+tbl_mtcars %>%
+  group_by(cyl) %>%
+  summarize(n = n(), # n() return number of rows in group
+            unique_carb = n_distinct(carb),
+            min_mpg = min(mpg),
+            max_mpg = max(mpg))
+```
+
+ggplot2 visualization
+=======================================================
+```{r, fig.height = 10, fig.width = 20, fig.align = "center"}
+theme_set(theme_bw(base_size = 30))
+tbl_mtcars %>%
+  filter(gear > 3) %>%
+  ggplot(aes(x = hp, y = disp, color = mpg, size = cyl)) +
+    geom_point()
+```
+
+Rcpp
+========================================================
+Rcpp is a package used to easily use C++ function in R.
+You can install it by executing `install.packages("Rcpp")` in R console.
+
+- Rcpp is now most used way to link C++ and R code in the package creation.
+- It uses comments (something like) C++ files to let the compiler know the function should be exported to R.
+- It also has libraries which allows to use R statements in C++.
+
+You can read more about it in
+
+https://cran.r-project.org/web/packages/Rcpp/vignettes/Rcpp-introduction.pdf
+
+https://cran.r-project.org/web/packages/Rcpp/.
+
+In this course we will just show how to use function `cppFunction()` to get a C function exported to R from a string right in the R script.
+
+### Main advantages
+- No need to write separate C++ file.
+- *Rcpp* will take care of the compiling, linking and exporting of the function to R.
+
+Rcpp rolling mean example
+========================================================
+```{r}
+library(Rcpp)
+
+myrollmean <- cppFunction('
+  NumericVector myrollmean( NumericVector x, double width) {
+    double temp = 0;
+    unsigned int n = x.size(), i, counter = 0;
+    NumericVector out(n - width + 1);
+    
+    for(i = 0; i < width; i++) {
+      temp += x[i];
+    }
+    
+    out[0] = temp / width;
+    counter += 1;
+    
+    for( i = width; i < n; i++ ) {
+      temp = temp - x[i - width] + x[i];
+      out[counter] = temp / width;
+      counter += 1;
+    }
+    
+    return out;
+  }')
+```
+
+Rcpp rolling mean example continue
+=========================================================
+```{r, eval = FALSE}
+library(zoo)
+library(microbenchmark)
+
+vec <- 1:10000
+width <- 1000
+
+res_r <- rollmean(vec, width)
+res_c <- myrollmean(vec, width)
+
+identical(res_r, res_c)
+
+microbenchmark(rollmean(vec, width),
+               myrollmean(vec, width))
+```
+```{r, echo = FALSE}
+library(Rcpp)
+
+myrollmean <- cppFunction('
+  NumericVector myrollmean( NumericVector x, double width) {
+    double temp = 0;
+    unsigned int n = x.size(), i, counter = 0;
+    NumericVector out(n - width + 1);
+    
+    for(i = 0; i < width; i++) {
+      temp += x[i];
+    }
+    
+    out[0] = temp / width;
+    counter += 1;
+    
+    for( i = width; i < n; i++ ) {
+      temp = temp - x[i - width] + x[i];
+      out[counter] = temp / width;
+      counter += 1;
+    }
+    
+    return out;
+  }')
+
+library(zoo)
+library(microbenchmark)
+
+vec <- 1:10000
+width <- 1000
+
+res_r <- rollmean(vec, width)
+res_c <- myrollmean(vec, width)
+
+identical(res_r, res_c)
+
+microbenchmark("R" = rollmean(vec, width),
+               "C" = myrollmean(vec, width))
+```
+
+furrr
+========================================================
+It is a package for parallel evaluation based on the packages `future`.
+It takes map functions from `purrr` package and transform them into futures, effectively allowing for the parallel run of the map functions.
+
+```{r, eval = FALSE}
+library(furrr)
+
+plan(multiprocess)
+boot_df <- function(x) x[sample(nrow(x), replace = T), ]
+rsquared <- function(mod) summary(mod)$r.squared
+boot_lm <- function(i) {
+  rsquared(lm(mpg ~ wt + disp, data = boot_df(mtcars)))
+}
+
+res <- microbenchmark(map(1:500, boot_lm),
+               future_map(1:500, boot_lm),
+               parallel::mclapply(1:500, boot_lm, mc.cores = 6),
+               times = 50)
+res
+autoplot(res)
+```
+There is trouble with using futures in RStudio. Therefore, the evaluation is turned off for this chunk.
+
+pbdMPI
+====================================================
+It is a package for usage of MPI functions inside R.
+Prerequisities are having mpi installed.
+It supports Open MPI, Intel MPI and MPICH2.
+
+This is done by using configure.args when using R console, or with argument "R CMD INSTALL pbdMPI --with-mpi-version=OPENMPI" in command line.
+```{r, eval = FALSE}
+install.packages("pbdMPI", configure.args = "--with-mpi-version=OPENMPI")
+```
+Then R script should call library pbdMPI and then contain `init()` and `finalize()` functions similar to normal MPI usage and is run in command line using `mpiexec RScript path_to_script.R`.
+```{r, eval = FALSE}
+library(pbdMPI)
+library(tidyverse)
+
+init()
+random <- map(rep(4e5, 50), rnorm)
+id <- get.jid(length(random))
+
+local <- random[id]
+temp <- map(local, mean)
+
+result <- gather(temp)
+finalize()
+```
